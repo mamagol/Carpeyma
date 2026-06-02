@@ -56,11 +56,18 @@ type AddServiceStep =
 export default function VehicleDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-
   const {
-    user, vehicles, services, serviceItems, updateVehicle,  // ✨ serviceItems اضافه شد
-    getVehicleServices, deleteService, addService, addTransaction,
-  } = useApp();
+    user,
+    vehicles,
+    services,
+    serviceItems,
+    updateVehicle,
+    getVehicleServices,
+    deleteService,
+    addService,
+    addTransaction,
+  } = useApp(); // ✨ user رو اضافه کنید
+
   const vehicle = vehicles.find((v) => v.id === id);
   const vehicleServices = getVehicleServices(id || "");
 
@@ -218,38 +225,6 @@ export default function VehicleDetails() {
     }
   };
 
-const handleSubmitService = (e: React.FormEvent) => {
-  e.preventDefault();
-
-  const selectedService = serviceItems.find(
-    s => s.id === selectedServiceType || s.nameEn === selectedServiceType
-  );
-
-  addService({
-    vehicleId: vehicle.id,
-    serviceId: selectedService?.id || selectedServiceType,
-    type: selectedServiceType,
-    currentKilometers: serviceFormData.currentKilometers,
-    nextServiceKilometers: serviceFormData.nextServiceKilometers,
-    serviceDate: new Date(serviceFormData.serviceDate),
-    notes: serviceFormData.notes,
-    cost: serviceFormData.cost,
-  });
-
-  if (serviceFormData.cost > 0) {
-    addTransaction({
-      vehicleId: vehicle.id,
-      amount: serviceFormData.cost,
-      date: new Date(serviceFormData.serviceDate),
-      description: `${SERVICE_TYPES[selectedServiceType]} - ${vehicle.displayNameFa || vehicle.nameFa}`,
-      status: "paid",
-    });
-  }
-
-  setIsAddServiceOpen(false);
-};
-
-  
   const handleOpenAddService = () => {
     setAddServiceStep("select-service");
     setSelectedProduct(null);
@@ -328,7 +303,39 @@ const handleSubmitService = (e: React.FormEvent) => {
     }
   };
 
-  
+  const handleSubmitService = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const selectedService = serviceItems.find(
+      (s) =>
+        s.id === selectedServiceType ||
+        s.nameEn === selectedServiceType,
+    );
+
+    addService({
+      vehicleId: vehicle.id,
+      serviceId: selectedService?.id || selectedServiceType,
+      type: selectedServiceType,
+      currentKilometers: serviceFormData.currentKilometers,
+      nextServiceKilometers:
+        serviceFormData.nextServiceKilometers,
+      serviceDate: new Date(serviceFormData.serviceDate),
+      notes: serviceFormData.notes,
+      cost: serviceFormData.cost,
+    });
+
+    if (serviceFormData.cost > 0) {
+      addTransaction({
+        vehicleId: vehicle.id,
+        amount: serviceFormData.cost,
+        date: new Date(serviceFormData.serviceDate),
+        description: `${SERVICE_TYPES[selectedServiceType]} - ${vehicle.displayNameFa || vehicle.nameFa}`,
+        status: "paid",
+      });
+    }
+
+    setIsAddServiceOpen(false);
+  };
 
   const getServiceIcon = (type: ServiceType) => {
     switch (type) {

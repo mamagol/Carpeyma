@@ -11,6 +11,7 @@ import {
   Service,
   Transaction,
   ServiceItem,
+  ServiceType,
 } from "../types";
 import { supabase } from "../../lib/supabase";
 import { Session } from "@supabase/supabase-js";
@@ -274,7 +275,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({
             servicesData.map((s) => ({
               id: s.id,
               vehicleId: s.vehicle_id,
-              type: s.service_type || "",
+              serviceId: s.service_id,
+              type: (s.service_id || "other") as ServiceType,
               currentKilometers: s.current_km_at_service,
               nextServiceKilometers: 0, // باید از product بیاد
               serviceDate: new Date(s.service_date),
@@ -776,14 +778,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       return;
     }
     const { error } = await supabase
-      .from("services")
+      .from("user_vehicle_services")
       .update({
-        service_type: data.type,
-        km_at_service: data.currentKilometers,
-        next_service_km: data.nextServiceKilometers,
-        date: data.serviceDate?.toISOString(),
+        service_date: data.serviceDate?.toISOString(),
+        current_km_at_service: data.currentKilometers,
         notes: data.notes,
-        cost: data.cost,
       })
       .eq("id", id);
     if (error) {
@@ -805,7 +804,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       return;
     }
     const { error } = await supabase
-      .from("services")
+      .from("user_vehicle_services")
       .delete()
       .eq("id", id);
     if (error) {
