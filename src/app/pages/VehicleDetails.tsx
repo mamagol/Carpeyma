@@ -85,7 +85,7 @@ export default function VehicleDetails() {
     useState<ServiceType>("engine-oil");
   const [selectedProduct, setSelectedProduct] =
     useState<any>(null); // ✨ any
-
+  const [selectedServiceName, setSelectedServiceName] = useState("");
   const [recommendedProducts, setRecommendedProducts] =
     useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] =
@@ -250,6 +250,7 @@ export default function VehicleDetails() {
     serviceType: ServiceType,
   ) => {
     setSelectedServiceType(serviceType);
+    setSelectedServiceName(SERVICE_TYPES[serviceType]);
     setAddServiceStep("select-product");
     setIsLoadingProducts(true);
 
@@ -310,12 +311,15 @@ export default function VehicleDetails() {
 
   const handleSubmitService = async (e: React.FormEvent) => {
     e.preventDefault();
-
+console.log('DEBUG selectedServiceName:', selectedServiceName);
+console.log('DEBUG serviceItems:', serviceItems);
+console.log('DEBUG selectedServiceType:', selectedServiceType);
     const selectedService = serviceItems.find(
       (s) =>
-        s.nameFa === selectedServiceName ||
-        s.nameEn === selectedServiceType,
+        s => s.nameEn === selectedServiceType
     );
+
+    console.log('DEBUG selectedService:', selectedService);
 
     addService({
       vehicleId: vehicle.id,

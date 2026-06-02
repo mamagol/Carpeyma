@@ -10,6 +10,7 @@ import ProductSelection from './pages/ProductSelection';
 import AddService from './pages/AddService';
 import Transactions from './pages/Transactions';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useApp();
@@ -76,6 +77,10 @@ export const router = createBrowserRouter([
       {
         path: 'profile',
         element: <Profile />,
+      },
+      {
+        path: 'admin',
+        element: <Admin />,
       },
     ],
   },

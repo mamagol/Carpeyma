@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { LogOut, Edit, Check } from 'lucide-react';
+import { LogOut, Edit, Check, Settings } from 'lucide-react';
 import { getProvinceNames, getCitiesByProvince } from '../../lib/iranCities';
 
 export default function Profile() {
@@ -189,7 +189,15 @@ export default function Profile() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">تنظیمات حساب</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/admin')}
+            className="w-full"
+          >
+            <Settings className="w-4 h-4 ml-1" />
+            پنل مدیریت
+          </Button>
           <Button
             variant="destructive"
             onClick={handleLogout}

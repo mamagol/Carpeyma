@@ -11,6 +11,7 @@ import {
   Service,
   Transaction,
   ServiceItem,
+  ServiceType,
 } from "../types";
 import { supabase } from "../../lib/supabase";
 import { Session } from "@supabase/supabase-js";
@@ -281,21 +282,33 @@ export const AppProvider: React.FC<AppProviderProps> = ({
               "vehicle_id",
               vehiclesData.map((v) => v.id),
             )
-            .order("date", { ascending: false });
+            .order("service_date", { ascending: false });
 
         if (!servicesError && servicesData) {
+          const serviceIds = servicesData.map((s) => s.id);
+          const { data: productsData } = await supabase
+            .from("user_vehicle_service_products")
+            .select("user_vehicle_service_id, next_service_km")
+            .in("user_vehicle_service_id", serviceIds);
           setServices(
-            servicesData.map((s) => ({
-              id: s.id,
-              vehicleId: s.vehicle_id,
-              type: s.service_type as any,
-              currentKilometers: s.km_at_service,
-              nextServiceKilometers: s.next_service_km,
-              serviceDate: new Date(s.date),
-              notes: s.notes,
-              cost: s.cost,
-              createdAt: new Date(s.created_at),
-            })),
+            servicesData.map((s) => {
+              const product = productsData?.find(
+                (p) => p.user_vehicle_service_id === s.id,
+              );
+              return {
+                id: s.id,
+                vehicleId: s.vehicle_id,
+                serviceId: s.service_id,
+                type: (s.service_id || "other") as ServiceType,
+                currentKilometers: s.current_km_at_service,
+                nextServiceKilometers:
+                  product?.next_service_km || 0,
+                serviceDate: new Date(s.service_date),
+                notes: s.notes,
+                cost: 0,
+                createdAt: new Date(s.created_at),
+              };
+            }),
           );
         }
       }
@@ -804,6 +817,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       );
       setServices([...services, newService]);
     } else if (data) {
+      if (service.serviceProduct) {
+        await supabase
+          .from("user_vehicle_service_products")
+          .insert({
+            user_vehicle_service_id: data.id,
+            product_snapshot: service.serviceProduct,
+            replacement_after_months:
+              service.serviceProduct.replacement_after_months,
+            usable_km_min:
+              service.serviceProduct.usable_km?.min,
+            usable_km_max:
+              service.serviceProduct.usable_km?.max,
+            next_service_km: service.nextServiceKilometers,
+            confidence: service.serviceProduct.confidence,
+            needs_review: service.serviceProduct.needs_review,
+          });
+      }
       setServices([
         ...services,
         { ...newService, id: data.id },
@@ -956,7 +986,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
 
     try {
       const { data, error } = await supabase
-        .from("user_vehicle_services")
+        .from("services")
         .select("*")
         .order("name_fa", { ascending: true });
 
