@@ -271,6 +271,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({
             .order("service_date", { ascending: false });
 
         if (!servicesError && servicesData) {
+          const serviceIds = servicesData.map((s) => s.id);
+          const { data: productsData } = await supabase
+            .from("user_vehicle_service_products")
+            .select("user_vehicle_service_id, next_service_km")
+            .in("user_vehicle_service_id", serviceIds);
           setServices(
             servicesData.map((s) => ({
               id: s.id,
@@ -762,99 +767,114 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         ...services,
         { ...newService, id: data.id },
       ]);
+      if (service.serviceProduct) {
+        await supabase
+          .from("user_vehicle_service_products")
+          .insert({
+            user_vehicle_service_id: data.id,
+            product_snapshot: service.serviceProduct,
+            replacement_after_months:
+              service.serviceProduct.replacement_after_months,
+            usable_km_min:
+              service.serviceProduct.usable_km?.min,
+            usable_km_max:
+              service.serviceProduct.usable_km?.max,
+            next_service_km: service.nextServiceKilometers,
+            confidence: service.serviceProduct.confidence,
+            needs_review: service.serviceProduct.needs_review,
+          });
+      }
     }
   };
+};
 
-  const updateService = async (
-    id: string,
-    data: Partial<Service>,
-  ) => {
-    if (!config.USE_DATABASE) {
-      setServices(
-        services.map((s) =>
-          s.id === id ? { ...s, ...data } : s,
-        ),
-      );
-      return;
-    }
-    const { error } = await supabase
-      .from("user_vehicle_services")
-      .update({
-        service_date: data.serviceDate?.toISOString(),
-        current_km_at_service: data.currentKilometers,
-        notes: data.notes,
-      })
-      .eq("id", id);
-    if (error) {
-      console.warn(
-        "Error updating in database, using local:",
-        error,
-      );
-    }
+const updateService = async (
+  id: string,
+  data: Partial<Service>,
+) => {
+  if (!config.USE_DATABASE) {
     setServices(
       services.map((s) =>
         s.id === id ? { ...s, ...data } : s,
       ),
     );
-  };
+    return;
+  }
+  const { error } = await supabase
+    .from("user_vehicle_services")
+    .update({
+      service_date: data.serviceDate?.toISOString(),
+      current_km_at_service: data.currentKilometers,
+      notes: data.notes,
+    })
+    .eq("id", id);
+  if (error) {
+    console.warn(
+      "Error updating in database, using local:",
+      error,
+    );
+  }
+  setServices(
+    services.map((s) => (s.id === id ? { ...s, ...data } : s)),
+  );
+};
 
-  const deleteService = async (id: string) => {
-    if (!config.USE_DATABASE) {
-      setServices(services.filter((s) => s.id !== id));
-      return;
-    }
-    const { error } = await supabase
-      .from("user_vehicle_services")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      console.warn(
-        "Error deleting from database, using local:",
-        error,
-      );
-    }
+const deleteService = async (id: string) => {
+  if (!config.USE_DATABASE) {
     setServices(services.filter((s) => s.id !== id));
-  };
+    return;
+  }
+  const { error } = await supabase
+    .from("user_vehicle_services")
+    .delete()
+    .eq("id", id);
+  if (error) {
+    console.warn(
+      "Error deleting from database, using local:",
+      error,
+    );
+  }
+  setServices(services.filter((s) => s.id !== id));
+};
 
-  const addTransaction = async (
-    transaction: Omit<Transaction, "id">,
-  ) => {
-    if (!user) return;
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: Date.now().toString(),
-    };
-    if (!config.USE_DATABASE) {
-      setTransactions([...transactions, newTransaction]);
-      return;
-    }
-    const { data, error } = await supabase
-      .from("transactions")
-      .insert({
-        user_id: user.id,
-        vehicle_id: transaction.vehicleId,
-        service_id: transaction.serviceId,
-        amount: transaction.amount,
-        date: transaction.date.toISOString(),
-        description: transaction.description,
-        type:
-          transaction.status === "paid" ? "expense" : "income",
-      })
-      .select()
-      .maybeSingle();
-    if (error) {
-      console.warn(
-        "Error saving to database, using local:",
-        error,
-      );
-      setTransactions([...transactions, newTransaction]);
-    } else if (data) {
-      setTransactions([
-        ...transactions,
-        { ...newTransaction, id: data.id },
-      ]);
-    }
+const addTransaction = async (
+  transaction: Omit<Transaction, "id">,
+) => {
+  if (!user) return;
+  const newTransaction: Transaction = {
+    ...transaction,
+    id: Date.now().toString(),
   };
+  if (!config.USE_DATABASE) {
+    setTransactions([...transactions, newTransaction]);
+    return;
+  }
+  const { data, error } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: user.id,
+      vehicle_id: transaction.vehicleId,
+      service_id: transaction.serviceId,
+      amount: transaction.amount,
+      date: transaction.date.toISOString(),
+      description: transaction.description,
+      type:
+        transaction.status === "paid" ? "expense" : "income",
+    })
+    .select()
+    .maybeSingle();
+  if (error) {
+    console.warn(
+      "Error saving to database, using local:",
+      error,
+    );
+    setTransactions([...transactions, newTransaction]);
+  } else if (data) {
+    setTransactions([
+      ...transactions,
+      { ...newTransaction, id: data.id },
+    ]);
+  }
 
   const getVehicleServices = (vehicleId: string) =>
     services.filter((s) => s.vehicleId === vehicleId);

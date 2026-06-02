@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useApp } from "../context/AppContext";
 import {
@@ -66,7 +66,12 @@ export default function VehicleDetails() {
     deleteService,
     addService,
     addTransaction,
-  } = useApp(); // ✨ user رو اضافه کنید
+    loadServiceItems,
+  } = useApp();
+
+  useEffect(() => {
+    loadServiceItems();
+  }, []);
 
   const vehicle = vehicles.find((v) => v.id === id);
   const vehicleServices = getVehicleServices(id || "");
@@ -312,6 +317,25 @@ export default function VehicleDetails() {
         s.nameEn === selectedServiceType,
     );
 
+    // بعد از addService و قبل از setIsAddServiceOpen(false):
+
+    if (selectedProduct) {
+      await supabase
+        .from("user_vehicle_service_products")
+        .insert({
+          user_vehicle_service_id: newServiceId, // id سرویس ذخیره شده
+          product_snapshot: selectedProduct,
+          replacement_after_months:
+            selectedProduct.replacement_after_months,
+          usable_km_min: selectedProduct.usable_km?.min,
+          usable_km_max: selectedProduct.usable_km?.max,
+          next_service_km:
+            serviceFormData.nextServiceKilometers,
+          confidence: selectedProduct.confidence,
+          needs_review: selectedProduct.needs_review,
+        });
+    }
+
     addService({
       vehicleId: vehicle.id,
       serviceId: selectedService?.id || selectedServiceType,
@@ -322,6 +346,7 @@ export default function VehicleDetails() {
       serviceDate: new Date(serviceFormData.serviceDate),
       notes: serviceFormData.notes,
       cost: serviceFormData.cost,
+      serviceProduct: selectedProduct,
     });
 
     if (serviceFormData.cost > 0) {
