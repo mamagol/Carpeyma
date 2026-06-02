@@ -61,13 +61,13 @@ export default function VehicleDetails() {
     vehicles,
     services,
     serviceItems,
+    loadServiceItems,
     updateVehicle,
     getVehicleServices,
     deleteService,
     addService,
     addTransaction,
-    loadServiceItems,
-  } = useApp();
+  } = useApp(); // ✨ user رو اضافه کنید
 
   useEffect(() => {
     loadServiceItems();
@@ -308,33 +308,14 @@ export default function VehicleDetails() {
     }
   };
 
-  const handleSubmitService = (e: React.FormEvent) => {
+  const handleSubmitService = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const selectedService = serviceItems.find(
       (s) =>
-        s.id === selectedServiceType ||
+        s.nameFa === selectedServiceName ||
         s.nameEn === selectedServiceType,
     );
-
-    // بعد از addService و قبل از setIsAddServiceOpen(false):
-
-    if (selectedProduct) {
-      await supabase
-        .from("user_vehicle_service_products")
-        .insert({
-          user_vehicle_service_id: newServiceId, // id سرویس ذخیره شده
-          product_snapshot: selectedProduct,
-          replacement_after_months:
-            selectedProduct.replacement_after_months,
-          usable_km_min: selectedProduct.usable_km?.min,
-          usable_km_max: selectedProduct.usable_km?.max,
-          next_service_km:
-            serviceFormData.nextServiceKilometers,
-          confidence: selectedProduct.confidence,
-          needs_review: selectedProduct.needs_review,
-        });
-    }
 
     addService({
       vehicleId: vehicle.id,
