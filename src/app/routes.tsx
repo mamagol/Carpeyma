@@ -62,11 +62,11 @@ export const router = createBrowserRouter([
         element: <ServiceSelection />,
       },
       {
-        path: 'vehicles/:vehicleId/service/:serviceType/products',
+        path: 'vehicles/:vehicleId/service/:serviceId/products',
         element: <ProductSelection />,
       },
       {
-        path: 'vehicles/:vehicleId/service/:serviceType/add',
+        path: 'vehicles/:vehicleId/service/:serviceId/add',
         element: <AddService />,
       },
       {

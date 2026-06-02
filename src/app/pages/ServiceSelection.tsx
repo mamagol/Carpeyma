@@ -1,25 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useApp } from '../context/AppContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { ArrowRight, Droplet, Filter, Wind, Wrench, Clock, Package } from 'lucide-react';
-import { SERVICE_TYPES, ServiceType } from '../types';
-
-const SERVICE_ICONS: Record<ServiceType, React.ElementType> = {
-  'engine-oil': Droplet,
-  'oil-filter': Filter,
-  'air-filter': Wind,
-  'cabin-filter': Wind,
-  'timing-belt': Clock,
-  'other': Package,
-};
+import { ArrowRight, Wrench } from 'lucide-react';
 
 export default function ServiceSelection() {
   const navigate = useNavigate();
   const { vehicleId } = useParams<{ vehicleId: string }>();
+  const { serviceItems, loadServiceItems } = useApp();
 
-  const handleServiceClick = (serviceType: ServiceType) => {
-    navigate(`/vehicles/${vehicleId}/service/${serviceType}/products`);
+  useEffect(() => {
+    loadServiceItems();
+  }, []);
+
+  const handleServiceClick = (serviceId: string, serviceName: string) => {
+    // ذخیره اطلاعات سرویس انتخاب شده برای استفاده در صفحه بعد
+    sessionStorage.setItem('selectedServiceId', serviceId);
+    sessionStorage.setItem('selectedServiceName', serviceName);
+    navigate(`/vehicles/${vehicleId}/service/${serviceId}/products`);
   };
 
   return (
@@ -43,25 +42,39 @@ export default function ServiceSelection() {
 
       {/* Service Grid */}
       <div className="grid grid-cols-2 gap-4">
-        {(Object.entries(SERVICE_TYPES) as [ServiceType, string][]).map(([type, label]) => {
-          const Icon = SERVICE_ICONS[type];
-          
+        {serviceItems.map((service) => {
           return (
             <Card
-              key={type}
+              key={service.id}
               className="cursor-pointer hover:shadow-lg hover:border-[#3B82F6] transition-all active:scale-95"
-              onClick={() => handleServiceClick(type)}
+              onClick={() => handleServiceClick(service.id, service.nameFa)}
             >
               <CardContent className="pt-6 pb-6 flex flex-col items-center gap-3">
-                <div className="w-16 h-16 bg-[#3B82F6]/10 rounded-2xl flex items-center justify-center">
-                  <Icon className="w-8 h-8 text-[#3B82F6]" />
-                </div>
-                <h3 className="font-medium text-center">{label}</h3>
+                {service.imageUrl ? (
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden bg-muted">
+                    <img
+                      src={service.imageUrl}
+                      alt={service.nameFa}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 bg-[#3B82F6]/10 rounded-2xl flex items-center justify-center">
+                    <Wrench className="w-8 h-8 text-[#3B82F6]" />
+                  </div>
+                )}
+                <h3 className="font-medium text-center">{service.nameFa}</h3>
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {serviceItems.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">در حال بارگذاری سرویس‌ها...</p>
+        </div>
+      )}
     </div>
   );
 }

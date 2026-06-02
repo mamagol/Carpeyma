@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { LogOut, Edit, Check } from 'lucide-react';
+import { getProvinceNames, getCitiesByProvince } from '../../lib/iranCities';
 
 export default function Profile() {
   const { user, logout, updateUser } = useApp();
@@ -14,7 +16,18 @@ export default function Profile() {
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
+    province: user?.province || '',
+    city: user?.city || '',
   });
+  const [cities, setCities] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (formData.province) {
+      setCities(getCitiesByProvince(formData.province));
+    } else {
+      setCities([]);
+    }
+  }, [formData.province]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,10 +90,50 @@ export default function Profile() {
                   placeholder="نام خانوادگی خود را وارد کنید"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="province">استان</Label>
+                <Select
+                  value={formData.province}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, province: value, city: '' });
+                  }}
+                >
+                  <SelectTrigger id="province">
+                    <SelectValue placeholder="استان خود را انتخاب کنید" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getProvinceNames().map((province) => (
+                      <SelectItem key={province} value={province}>
+                        {province}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">شهر</Label>
+                <Select
+                  value={formData.city}
+                  onValueChange={(value) => setFormData({ ...formData, city: value })}
+                  disabled={!formData.province}
+                >
+                  <SelectTrigger id="city">
+                    <SelectValue placeholder={formData.province ? "شهر خود را انتخاب کنید" : "ابتدا استان را انتخاب کنید"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cities.map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex gap-2">
                 <Button
                   type="submit"
                   className="flex-1 bg-[#3B82F6] hover:bg-[#3B82F6]/90 text-white"
+                  disabled={!formData.province || !formData.city}
                 >
                   <Check className="w-4 h-4 ml-1" />
                   ذخیره
@@ -93,6 +146,8 @@ export default function Profile() {
                     setFormData({
                       firstName: user?.firstName || '',
                       lastName: user?.lastName || '',
+                      province: user?.province || '',
+                      city: user?.city || '',
                     });
                   }}
                 >
@@ -114,6 +169,14 @@ export default function Profile() {
                 <p className="text-sm text-muted-foreground mb-1">شماره موبایل</p>
                 <p className="font-medium" dir="ltr">
                   {user?.phoneNumber}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">استان و شهر</p>
+                <p className="font-medium">
+                  {user?.province && user?.city
+                    ? `${user.province}، ${user.city}`
+                    : 'تکمیل نشده'}
                 </p>
               </div>
             </div>

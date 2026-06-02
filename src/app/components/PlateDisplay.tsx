@@ -1,57 +1,29 @@
 import React from 'react';
+import { parsePlate } from '../../lib/plateHelper';
 
 interface PlateData {
-  part1: string;
-  letter: string;
-  part2: string;
-  cityCode: string;
+  section1: string;  // xx
+  letter: string;    // $
+  section2: string;  // yyy
+  section3: string;  // zz
 }
 
 interface PlateDisplayProps {
-  plate: string; // format: "12الف345-11"
+  plate: string; // format: "xx $ yyy zz"
 }
 
-// پلاک‌های ویژه
-const SPECIAL_PLATES = [
-  { label: 'معلولین', value: 'معلولین', icon: '♿' },
-  { label: 'تشریفات', value: 'تشریفات', icon: '⭐' },
-  { label: 'دیپلمات', value: 'دیپلمات', icon: '🎖️' },
-];
-
 export function PlateDisplay({ plate }: PlateDisplayProps) {
-  // Parse the plate string into parts
-  const parsePlate = (plateStr: string): PlateData => {
-    if (!plateStr || !plateStr.includes('-')) {
-      return { part1: '', letter: '', part2: '', cityCode: '' };
-    }
+  const plateData = parsePlate(plate);
 
-    const parts = plateStr.split('-');
-    if (parts.length !== 2) {
-      return { part1: '', letter: '', part2: '', cityCode: '' };
-    }
+  if (!plateData) {
+    return null;
+  }
 
-    const firstPart = parts[0];
-    const cityCode = parts[1];
-
-    // Extract: 2 digits + letter + 3 digits
-    const part1Match = firstPart.match(/^(\d{2})/);
-    const letterMatch = firstPart.match(/[آ-ی♿⭐🎖️]/u);
-    const part2Match = firstPart.match(/(\d{3})$/);
-
-    return {
-      part1: part1Match ? part1Match[1] : '',
-      letter: letterMatch ? letterMatch[0] : '',
-      part2: part2Match ? part2Match[1] : '',
-      cityCode: cityCode,
-    };
-  };
-
-  const value = parsePlate(plate);
-
-  // Helper function to get display for letter (icon if special, text otherwise)
-  const getLetterDisplay = (letter: string) => {
-    const specialPlate = SPECIAL_PLATES.find(p => p.value === letter);
-    return specialPlate ? specialPlate.icon : (letter || '');
+  const value = {
+    part1: plateData.section1,
+    letter: plateData.letter,
+    part2: plateData.section2,
+    cityCode: plateData.section3,
   };
 
   return (
@@ -68,7 +40,7 @@ export function PlateDisplay({ plate }: PlateDisplayProps) {
 
           {/* حرف */}
           <div className="w-8 h-8 text-center flex items-center justify-center text-lg font-black bg-gradient-to-b from-[#3B82F6]/10 to-[#3B82F6]/5 text-[#1a1a1a] border-2 border-[#3B82F6] rounded-md">
-            {getLetterDisplay(value.letter)}
+            {value.letter || ''}
           </div>
 
           {/* سه رقم */}

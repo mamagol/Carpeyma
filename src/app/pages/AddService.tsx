@@ -1,65 +1,176 @@
-import React, { useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { useApp } from '../context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { PersianDatePicker } from '../components/PersianDatePicker';
 import { ArrowRight } from 'lucide-react';
-import { SERVICE_TYPES, ServiceType } from '../types';
-import { Product } from '../data/products';
-import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { RecommendedProduct } from '../types';
+import { config } from '../../config';
+import { supabase } from '../../lib/supabase';
 
 export default function AddService() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { vehicleId, serviceType } = useParams<{ vehicleId: string; serviceType: ServiceType }>();
-  const { vehicles, addService, addTransaction } = useApp();
-  
-  const product = location.state?.product as Product | undefined;
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const { vehicleId, serviceId } = useParams<{ vehicleId: string; serviceId: string }>();
+  const { user, vehicles, updateVehicle } = useApp();
 
+  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const serviceName = sessionStorage.getItem('selectedServiceName') || '';
+  const productData = sessionStorage.getItem('selectedProduct');
+  const product: RecommendedProduct | null = productData ? JSON.parse(productData) : null;
+
+  const [showUpdateKmDialog, setShowUpdateKmDialog] = useState(false);
   const [formData, setFormData] = useState({
     currentKilometers: vehicle?.currentKilometers || 0,
-    nextServiceKilometers: (vehicle?.currentKilometers || 0) + 5000,
+    nextServiceKilometers:
+      vehicle && product?.usableKm?.max
+        ? vehicle.currentKilometers + product.usableKm.max
+        : (vehicle?.currentKilometers || 0) + 5000,
     serviceDate: new Date(),
-    notes: product ? `محصول: ${product.name}${product.brand ? ` - ${product.brand}` : ''}` : '',
-    cost: product?.price || 0,
+    notes: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!vehicle || !serviceType) {
+
+    if (!vehicle || !user || !serviceId) {
       return;
     }
 
-    addService({
-      vehicleId: vehicle.id,
-      type: serviceType,
-      currentKilometers: formData.currentKilometers,
-      nextServiceKilometers: formData.nextServiceKilometers,
-      serviceDate: new Date(formData.serviceDate),
-      notes: formData.notes,
-      cost: formData.cost,
-    });
-
-    if (formData.cost > 0) {
-      addTransaction({
-        vehicleId: vehicle.id,
-        amount: formData.cost,
-        date: new Date(formData.serviceDate),
-        description: `${SERVICE_TYPES[serviceType]}${product ? ` - ${product.name}` : ''} - ${vehicle.brand} ${vehicle.model}`,
-        status: 'paid',
-      });
+    // بررسی تغییر کیلومتر
+    if (formData.currentKilometers !== vehicle.currentKilometers) {
+      setShowUpdateKmDialog(true);
+      return;
     }
 
-    navigate(`/vehicles/${vehicleId}`);
+    await saveService(false);
   };
 
-  if (!vehicle || !serviceType) {
+  const saveService = async (updateVehicleKm: boolean) => {
+    if (!vehicle || !user || !serviceId) return;
+
+    try {
+      if (!config.USE_DATABASE) {
+        // localStorage mode
+        const serviceRecord = {
+          id: Date.now().toString(),
+          userId: user.id,
+          vehicleId: vehicle.id,
+          serviceId: serviceId,
+          serviceDate: formData.serviceDate,
+          currentKmAtService: formData.currentKilometers,
+          notes: formData.notes,
+        };
+
+        // ذخیره در localStorage
+        const storedServices = localStorage.getItem('carpima_user_services');
+        const services = storedServices ? JSON.parse(storedServices) : [];
+        services.push(serviceRecord);
+        localStorage.setItem('carpima_user_services', JSON.stringify(services));
+
+        if (product) {
+          const productRecord = {
+            id: Date.now().toString() + '_product',
+            userVehicleServiceId: serviceRecord.id,
+            productSnapshot: product,
+            replacementAfterMonths: product.replacementAfterMonths,
+            usableKmMin: product.usableKm?.min,
+            usableKmMax: product.usableKm?.max,
+            nextServiceKm: formData.nextServiceKilometers,
+            confidence: product.confidence,
+            needsReview: product.needsReview,
+          };
+
+          const storedProducts = localStorage.getItem('carpima_service_products');
+          const products = storedProducts ? JSON.parse(storedProducts) : [];
+          products.push(productRecord);
+          localStorage.setItem('carpima_service_products', JSON.stringify(products));
+        }
+
+        // آپدیت کیلومتر خودرو اگر لازم باشه
+        if (updateVehicleKm) {
+          await updateVehicle(vehicle.id, {
+            currentKilometers: formData.currentKilometers,
+          });
+        }
+
+        navigate(`/vehicles/${vehicleId}`);
+        return;
+      }
+
+      // Database mode
+      const { data: serviceData, error: serviceError } = await supabase
+        .from('user_vehicle_services')
+        .insert({
+          user_id: user.id,
+          vehicle_id: vehicle.id,
+          service_id: serviceId,
+          service_date: formData.serviceDate.toISOString(),
+          current_km_at_service: formData.currentKilometers,
+          notes: formData.notes,
+        })
+        .select()
+        .single();
+
+      if (serviceError) {
+        console.error('Error saving service:', serviceError);
+        alert('خطا در ذخیره سرویس');
+        return;
+      }
+
+      // ذخیره محصول
+      if (product && serviceData) {
+        const { error: productError } = await supabase
+          .from('user_vehicle_service_products')
+          .insert({
+            user_vehicle_service_id: serviceData.id,
+            product_snapshot: product,
+            replacement_after_months: product.replacementAfterMonths,
+            usable_km_min: product.usableKm?.min,
+            usable_km_max: product.usableKm?.max,
+            next_service_km: formData.nextServiceKilometers,
+            confidence: product.confidence,
+            needs_review: product.needsReview,
+          });
+
+        if (productError) {
+          console.error('Error saving product:', productError);
+        }
+      }
+
+      // آپدیت کیلومتر خودرو
+      if (updateVehicleKm) {
+        await updateVehicle(vehicle.id, {
+          currentKilometers: formData.currentKilometers,
+        });
+      }
+
+      // پاک کردن sessionStorage
+      sessionStorage.removeItem('selectedServiceId');
+      sessionStorage.removeItem('selectedServiceName');
+      sessionStorage.removeItem('selectedProduct');
+
+      navigate(`/vehicles/${vehicleId}`);
+    } catch (error) {
+      console.error('Error saving service:', error);
+      alert('خطا در ذخیره سرویس');
+    }
+  };
+
+  if (!vehicle) {
     return (
       <div className="p-4">
         <Card>
@@ -81,14 +192,14 @@ export default function AddService() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate(`/vehicles/${vehicleId}/service/${serviceType}/products`)}
+          onClick={() => navigate(-1)}
         >
           <ArrowRight className="w-5 h-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl">ثبت {SERVICE_TYPES[serviceType]}</h1>
+          <h1 className="text-2xl">ثبت {serviceName}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {vehicle.brand} {vehicle.model}
+            {vehicle.displayNameFa || vehicle.nameFa}
           </p>
         </div>
       </div>
@@ -99,23 +210,27 @@ export default function AddService() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">محصول انتخاب شده</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex gap-4">
-              <div className="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
-                <ImageWithFallback
-                  src={product.imageUrl}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-medium">{product.name}</h3>
-                {product.brand && (
-                  <p className="text-sm text-muted-foreground">{product.brand}</p>
-                )}
-                <p className="text-lg font-medium text-[#3B82F6] mt-2">
-                  {product.price.toLocaleString('fa-IR')} تومان
+          <CardContent className="space-y-3">
+            <div className="flex gap-3">
+              {product.imageUrl && (
+                <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-muted">
+                  <img
+                    src={product.imageUrl}
+                    alt={product.productNameFa}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div>
+                <p className="font-medium">{product.productNameFa}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {product.productBrandFa}
                 </p>
+                {product.nextServiceKm && (
+                  <p className="text-sm text-[#3B82F6] mt-2">
+                    سرویس بعدی: {product.nextServiceKm.toLocaleString('fa-IR')} کیلومتر
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -132,11 +247,17 @@ export default function AddService() {
                 id="currentKm"
                 type="number"
                 value={formData.currentKilometers}
-                onChange={(e) => setFormData({ ...formData, currentKilometers: parseInt(e.target.value) || 0 })}
-                min="0"
+                onChange={(e) => setFormData({
+                  ...formData,
+                  currentKilometers: parseInt(e.target.value) || 0
+                })}
+                min={vehicle.currentKilometers}
                 dir="ltr"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                حداقل: {vehicle.currentKilometers.toLocaleString('fa-IR')} کیلومتر
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -145,52 +266,84 @@ export default function AddService() {
                 id="nextKm"
                 type="number"
                 value={formData.nextServiceKilometers}
-                onChange={(e) => setFormData({ ...formData, nextServiceKilometers: parseInt(e.target.value) || 0 })}
-                min={formData.currentKilometers}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  nextServiceKilometers: parseInt(e.target.value) || 0
+                })}
                 dir="ltr"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="serviceDate">تاریخ انجام سرویس</Label>
               <PersianDatePicker
                 value={formData.serviceDate}
                 onChange={(date) => setFormData({ ...formData, serviceDate: date })}
+                label="تاریخ انجام سرویس"
+                maxDate={new Date()}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cost">هزینه (تومان)</Label>
-              <Input
-                id="cost"
-                type="number"
-                value={formData.cost}
-                onChange={(e) => setFormData({ ...formData, cost: parseInt(e.target.value) || 0 })}
-                min="0"
-                dir="ltr"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">توضیحات (اختیاری)</Label>
+              <Label htmlFor="notes">یادداشت (اختیاری)</Label>
               <Textarea
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="توضیحات اضافی در مورد سرویس..."
                 rows={3}
               />
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full bg-[#3B82F6] hover:bg-[#3B82F6]/90 text-white"
-            >
-              ثبت سرویس
-            </Button>
+            <div className="flex gap-2 pt-4">
+              <Button
+                type="submit"
+                className="flex-1 bg-[#3B82F6] hover:bg-[#3B82F6]/90 text-white"
+              >
+                ثبت سرویس
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(-1)}
+              >
+                لغو
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
+
+      {/* Update KM Dialog */}
+      <AlertDialog open={showUpdateKmDialog} onOpenChange={setShowUpdateKmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>آپدیت کیلومتر خودرو</AlertDialogTitle>
+            <AlertDialogDescription>
+              کیلومتر انجام سرویس ({formData.currentKilometers.toLocaleString('fa-IR')}) با کیلومتر فعلی خودرو ({vehicle.currentKilometers.toLocaleString('fa-IR')}) متفاوت است.
+              <br /><br />
+              آیا می‌خواهید کیلومتر فعلی خودرو را به {formData.currentKilometers.toLocaleString('fa-IR')} تغییر دهید؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowUpdateKmDialog(false);
+              saveService(false);
+            }}>
+              خیر، تغییر نده
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowUpdateKmDialog(false);
+                saveService(true);
+              }}
+              className="bg-[#3B82F6] hover:bg-[#3B82F6]/90"
+            >
+              بله، تغییر بده
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

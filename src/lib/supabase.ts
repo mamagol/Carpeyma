@@ -1,17 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 // اطلاعات اتصال به Supabase
-const supabaseUrl = 'https://db.carpeyma.com:8000';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgwMTU4MjMzLCJleHAiOjE5Mzc4MzgyMzN9.36npIG0RK_Fjmjh1VsoRUmNlbjs1c6_NikWfM0nOkfk';
+const supabaseUrl = "https://db.carpeyma.com";
+const supabaseAnonKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgwMTU4MjMzLCJleHAiOjE5Mzc4MzgyMzN9.36npIG0RK_Fjmjh1VsoRUmNlbjs1c6_NikWfM0nOkfk";
 
 // ایجاد کلاینت Supabase
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
   },
-});
+);
 
 // تایپ‌های TypeScript برای جداول (می‌تونی بعداً اینها رو کامل‌تر کنی)
 export interface User {
@@ -52,7 +57,7 @@ export interface Transaction {
   vehicle_id?: string;
   service_id?: string;
   amount: number;
-  type: 'income' | 'expense';
+  type: "income" | "expense";
   description?: string;
   date: string;
   created_at?: string;
