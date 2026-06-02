@@ -35,6 +35,7 @@ interface AppContextType {
   logout: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
   addVehicle: (vehicleInput: {
+    brandFa: string;
     nameFa: string;
     modelFa?: string;
     year: number;
@@ -44,6 +45,7 @@ interface AppContextType {
   updateVehicle: (
     id: string,
     vehicleInput: {
+      brandFa?: string;
       nameFa?: string;
       modelFa?: string;
       year?: number;
@@ -100,12 +102,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // بارگذاری داده‌های کاربر
   useEffect(() => {
     initializeAuth();
   }, []);
 
-  // ذخیره خودکار در localStorage
   useEffect(() => {
     if (!config.USE_DATABASE && user) {
       localStorage.setItem(
@@ -155,9 +155,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       }
 
       if (storedVehicles) {
-        const vehiclesData = JSON.parse(storedVehicles);
         setVehicles(
-          vehiclesData.map((v: any) => ({
+          JSON.parse(storedVehicles).map((v: any) => ({
             ...v,
             createdAt: new Date(v.createdAt),
             updatedAt: v.updatedAt
@@ -168,9 +167,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       }
 
       if (storedServices) {
-        const servicesData = JSON.parse(storedServices);
         setServices(
-          servicesData.map((s: any) => ({
+          JSON.parse(storedServices).map((s: any) => ({
             ...s,
             serviceDate: new Date(s.serviceDate),
             createdAt: new Date(s.createdAt),
@@ -179,9 +177,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       }
 
       if (storedTransactions) {
-        const transactionsData = JSON.parse(storedTransactions);
         setTransactions(
-          transactionsData.map((t: any) => ({
+          JSON.parse(storedTransactions).map((t: any) => ({
             ...t,
             date: new Date(t.date),
           })),
@@ -199,24 +196,18 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     }
 
     try {
-      // بارگذاری از database
       const { data: userData, error: userError } =
         await supabase
           .from("profiles")
           .select("*")
           .eq("id", userId)
-          .single();
+          .maybeSingle();
 
-      if (userError && userError.code !== "PGRST116") {
-        console.warn(
-          "Error loading user, using local:",
-          userError,
-        );
-        await loadLocalData(userId);
-        return;
-      }
+      if (userError && userError.code !== "PGRST116")
+        throw userError;
 
       if (userData) {
+        console.log("✅ User loaded:", userData.phone_number);
         setUser({
           id: userData.id,
           phoneNumber: userData.phone_number,
@@ -226,9 +217,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({
           city: userData.city,
           createdAt: new Date(userData.created_at),
         });
+      } else {
+        console.log("❌ No userData found for userId:", userId);
       }
 
-      // بارگذاری خودروها
       const { data: vehiclesData, error: vehiclesError } =
         await supabase
           .from("vehicles")
@@ -236,11 +228,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
 
-      if (vehiclesError) {
-        console.warn("Error loading vehicles:", vehiclesError);
-        await loadLocalData(userId);
-        return;
-      }
+      if (vehiclesError) throw vehiclesError;
 
       if (vehiclesData) {
         setVehicles(
@@ -271,36 +259,33 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         );
       }
 
-      // بارگذاری سرویس‌ها
-      if (vehiclesData && vehiclesData.length > 0) {
+      const vehicleIds = vehiclesData?.map((v) => v.id) || [];
+      if (vehicleIds.length > 0) {
+        // به جای services.vehicle_id
         const { data: servicesData, error: servicesError } =
           await supabase
-            .from("services")
+            .from("user_vehicle_services")
             .select("*")
-            .in(
-              "vehicle_id",
-              vehiclesData.map((v) => v.id),
-            )
-            .order("date", { ascending: false });
+            .eq("user_id", userId)
+            .order("service_date", { ascending: false });
 
         if (!servicesError && servicesData) {
           setServices(
             servicesData.map((s) => ({
               id: s.id,
               vehicleId: s.vehicle_id,
-              type: s.service_type as any,
-              currentKilometers: s.km_at_service,
-              nextServiceKilometers: s.next_service_km,
-              serviceDate: new Date(s.date),
+              type: s.service_type || "",
+              currentKilometers: s.current_km_at_service,
+              nextServiceKilometers: 0, // باید از product بیاد
+              serviceDate: new Date(s.service_date),
               notes: s.notes,
-              cost: s.cost,
+              cost: 0,
               createdAt: new Date(s.created_at),
             })),
           );
         }
       }
 
-      // بارگذاری تراکنش‌ها
       const {
         data: transactionsData,
         error: transactionsError,
@@ -309,7 +294,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         .select("*")
         .eq("user_id", userId)
         .order("date", { ascending: false });
-
       if (!transactionsError && transactionsData) {
         setTransactions(
           transactionsData.map((t) => ({
@@ -324,8 +308,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         );
       }
     } catch (error) {
-      console.warn("Error loading data:", error);
-      await loadLocalData(userId);
+      console.error("Error loading user data:", error);
     }
   };
 
@@ -334,17 +317,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       const storedUserId = localStorage.getItem(
         "carpima_user_id",
       );
-
       if (storedUserId) {
         await loadUserData(storedUserId);
       }
-
       if (config.USE_DATABASE) {
         const {
           data: { session },
         } = await supabase.auth.getSession();
         setSession(session);
-
         if (session?.user && !storedUserId) {
           await loadUserData(session.user.id);
         }
@@ -363,24 +343,18 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         console.log("🔐 کد OTP (Local):", code);
         return { error: null };
       }
-
-      // ✨ تابع جدید آرایه برمیگردونه
       const { data, error } = await supabase.rpc("create_otp", {
         p_phone_number: phoneNumber,
       });
-
       if (error) {
         console.warn("Database error, using fallback:", error);
         const code = otpManager.generateOTP(phoneNumber);
         console.log("🔐 کد OTP (Fallback):", code);
         return { error: null };
       }
-
-      // ✨ data آرایه است، اولین عنصر رو بگیر
       if (data && data.length > 0 && data[0].code) {
         console.log("🔐 کد OTP (Database):", data[0].code);
       }
-
       return { error: null };
     } catch (error) {
       console.warn("Error, using fallback:", error);
@@ -400,28 +374,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         if (!result.success) {
           return { error: { message: result.error } };
         }
-
         const fakeUserId = `local_${phoneNumber}`;
         localStorage.setItem("carpima_user_id", fakeUserId);
         localStorage.setItem("carpima_phone", phoneNumber);
-
         const devUser: User = {
           id: fakeUserId,
           phoneNumber: phoneNumber,
           createdAt: new Date(),
         };
-
         setUser(devUser);
         localStorage.setItem(
           "carpima_user",
           JSON.stringify(devUser),
         );
         await loadLocalData(fakeUserId);
-
         return { error: null };
       }
 
-      // ✨ تابع جدید آرایه برمیگردونه
       const { data, error } = await supabase.rpc(
         "verify_otp_and_login",
         {
@@ -430,14 +399,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         },
       );
 
-      // ✨ چک کن data وجود داره و success هست
       if (
         error ||
         !data ||
         data.length === 0 ||
         !data[0].success
       ) {
-        // Fallback
         const result = otpManager.verifyOTP(phoneNumber, otp);
         if (!result.success) {
           return {
@@ -446,53 +413,56 @@ export const AppProvider: React.FC<AppProviderProps> = ({
             },
           };
         }
-
         const fakeUserId = `local_${phoneNumber}`;
         localStorage.setItem("carpima_user_id", fakeUserId);
         localStorage.setItem("carpima_phone", phoneNumber);
-
         const devUser: User = {
           id: fakeUserId,
           phoneNumber: phoneNumber,
           createdAt: new Date(),
         };
-
         setUser(devUser);
         localStorage.setItem(
           "carpima_user",
           JSON.stringify(devUser),
         );
         await loadLocalData(fakeUserId);
-
         return { error: null };
       }
 
-      // ✨ موفقیت - data[0].user_id
       const userId = data[0].user_id;
       localStorage.setItem("carpima_user_id", userId);
-      await loadUserData(userId);
 
+      const { data: profileCheck } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!profileCheck) {
+        await supabase
+          .from("profiles")
+          .insert({ id: userId, phone_number: phoneNumber });
+      }
+
+      await loadUserData(userId);
+      console.log("✅ verifyOTP success, userId:", userId);
       return { error: null };
     } catch (error) {
       console.warn("Error, using fallback:", error);
       const result = otpManager.verifyOTP(phoneNumber, otp);
-
       if (!result.success) {
         return { error: { message: result.error } };
       }
-
       const fakeUserId = `local_${phoneNumber}`;
       localStorage.setItem("carpima_user_id", fakeUserId);
-
       const devUser: User = {
         id: fakeUserId,
         phoneNumber: phoneNumber,
         createdAt: new Date(),
       };
-
       setUser(devUser);
       await loadLocalData(fakeUserId);
-
       return { error: null };
     }
   };
@@ -504,11 +474,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     localStorage.removeItem("carpima_vehicles");
     localStorage.removeItem("carpima_services");
     localStorage.removeItem("carpima_transactions");
-
     if (config.USE_DATABASE) {
       await supabase.auth.signOut();
     }
-
     setUser(null);
     setVehicles([]);
     setServices([]);
@@ -518,7 +486,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
 
   const updateUser = async (userData: Partial<User>) => {
     if (!user) return;
-
     if (!config.USE_DATABASE) {
       const updatedUser = { ...user, ...userData };
       setUser(updatedUser);
@@ -528,7 +495,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       );
       return;
     }
-
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -539,16 +505,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id);
-
     if (error) {
       console.warn("Error updating user, using local:", error);
     }
-
     const updatedUser = { ...user, ...userData };
     setUser(updatedUser);
   };
 
   const addVehicle = async (vehicleInput: {
+    brandFa: string;
     nameFa: string;
     modelFa?: string;
     year: number;
@@ -556,13 +521,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     currentKilometers: number;
   }) => {
     if (!user) return;
-
     try {
-      // فراخوانی webhook برای normalize کردن اطلاعات
       const normalizedData = await normalizeCarInfo(
         user.id,
         vehicleInput.nameFa,
-        vehicleInput.modelFa,
+        vehicleInput.brandFa,
       );
 
       const newVehicle: Vehicle = {
@@ -594,7 +557,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         return;
       }
 
-      // ذخیره در database
       const { data, error } = await supabase
         .from("vehicles")
         .insert({
@@ -617,7 +579,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
           needs_review: newVehicle.needsReview,
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.warn(
@@ -639,6 +601,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
   const updateVehicle = async (
     id: string,
     vehicleInput: {
+      brandFa?: string;
       nameFa?: string;
       modelFa?: string;
       year?: number;
@@ -647,7 +610,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     },
   ) => {
     if (!user) return;
-
     try {
       const existingVehicle = vehicles.find((v) => v.id === id);
       if (!existingVehicle) return;
@@ -659,17 +621,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         updatedAt: new Date(),
       };
 
-      // اگر نام یا مدل تغییر کرده، normalize کن
-      if (
-        vehicleInput.nameFa &&
-        vehicleInput.nameFa !== existingVehicle.nameFa
-      ) {
+      if (vehicleInput.nameFa || vehicleInput.brandFa) {
         const normalizedData = await normalizeCarInfo(
           user.id,
-          vehicleInput.nameFa,
-          vehicleInput.modelFa,
+          vehicleInput.nameFa || existingVehicle.nameFa,
+          vehicleInput.brandFa || existingVehicle.brandFa,
         );
-
         updatedData = {
           ...updatedData,
           brandFa: normalizedData.car.brand_fa,
@@ -699,7 +656,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         return;
       }
 
-      // ذخیره در database
       const { error } = await supabase
         .from("vehicles")
         .update({
@@ -729,7 +685,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
           error,
         );
       }
-
       setVehicles(
         vehicles.map((v) =>
           v.id === id ? { ...v, ...updatedData } : v,
@@ -749,19 +704,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       );
       return;
     }
-
     const { error } = await supabase
       .from("vehicles")
       .delete()
       .eq("id", id);
-
     if (error) {
       console.warn(
         "Error deleting from database, using local:",
         error,
       );
     }
-
     setVehicles(vehicles.filter((v) => v.id !== id));
     setServices(services.filter((s) => s.vehicleId !== id));
     setTransactions(
@@ -772,6 +724,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({
   const addService = async (
     service: Omit<Service, "id" | "createdAt">,
   ) => {
+    if (!user) return;
+
     const newService: Service = {
       ...service,
       id: Date.now().toString(),
@@ -784,19 +738,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     }
 
     const { data, error } = await supabase
-      .from("services")
+      .from("user_vehicle_services")
       .insert({
+        user_id: user.id,
         vehicle_id: service.vehicleId,
-        service_type: service.type,
-        km_at_service: service.currentKilometers,
-        next_service_km: service.nextServiceKilometers,
-        date: service.serviceDate.toISOString(),
+        service_id: service.serviceId, // باید از فرم بیاد
+        service_date: service.serviceDate.toISOString(),
+        current_km_at_service: service.currentKilometers,
         notes: service.notes,
-        cost: service.cost,
       })
       .select()
-      .single();
-
+      .maybeSingle();
     if (error) {
       console.warn(
         "Error saving to database, using local:",
@@ -823,7 +775,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       );
       return;
     }
-
     const { error } = await supabase
       .from("services")
       .update({
@@ -835,14 +786,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({
         cost: data.cost,
       })
       .eq("id", id);
-
     if (error) {
       console.warn(
         "Error updating in database, using local:",
         error,
       );
     }
-
     setServices(
       services.map((s) =>
         s.id === id ? { ...s, ...data } : s,
@@ -855,19 +804,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       setServices(services.filter((s) => s.id !== id));
       return;
     }
-
     const { error } = await supabase
       .from("services")
       .delete()
       .eq("id", id);
-
     if (error) {
       console.warn(
         "Error deleting from database, using local:",
         error,
       );
     }
-
     setServices(services.filter((s) => s.id !== id));
   };
 
@@ -875,17 +821,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     transaction: Omit<Transaction, "id">,
   ) => {
     if (!user) return;
-
     const newTransaction: Transaction = {
       ...transaction,
       id: Date.now().toString(),
     };
-
     if (!config.USE_DATABASE) {
       setTransactions([...transactions, newTransaction]);
       return;
     }
-
     const { data, error } = await supabase
       .from("transactions")
       .insert({
@@ -899,8 +842,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({
           transaction.status === "paid" ? "expense" : "income",
       })
       .select()
-      .single();
-
+      .maybeSingle();
     if (error) {
       console.warn(
         "Error saving to database, using local:",
@@ -915,19 +857,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({
     }
   };
 
-  const getVehicleServices = (vehicleId: string) => {
-    return services.filter((s) => s.vehicleId === vehicleId);
-  };
-
-  const getVehicleTransactions = (vehicleId: string) => {
-    return transactions.filter(
-      (t) => t.vehicleId === vehicleId,
-    );
-  };
+  const getVehicleServices = (vehicleId: string) =>
+    services.filter((s) => s.vehicleId === vehicleId);
+  const getVehicleTransactions = (vehicleId: string) =>
+    transactions.filter((t) => t.vehicleId === vehicleId);
 
   const loadServiceItems = async () => {
     if (!config.USE_DATABASE) {
-      // در حالت localStorage، از لیست پیش‌فرض استفاده می‌کنیم
       setServiceItems([
         { id: "1", nameFa: "تعویض روغن", nameEn: "Oil Change" },
         {
@@ -953,46 +889,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       ]);
       return;
     }
-
     try {
       const { data, error } = await supabase
         .from("services")
         .select("*")
         .order("name_fa", { ascending: true });
-
-      if (error) {
-        console.warn("Error loading service items:", error);
-        // Fallback
-        setServiceItems([
-          {
-            id: "1",
-            nameFa: "تعویض روغن",
-            nameEn: "Oil Change",
-          },
-          {
-            id: "2",
-            nameFa: "تعویض فیلتر روغن",
-            nameEn: "Oil Filter Change",
-          },
-          {
-            id: "3",
-            nameFa: "تعویض فیلتر هوا",
-            nameEn: "Air Filter Change",
-          },
-          {
-            id: "4",
-            nameFa: "تعویض فیلتر کابین",
-            nameEn: "Cabin Filter Change",
-          },
-          {
-            id: "5",
-            nameFa: "تعویض تسمه تایم",
-            nameEn: "Timing Belt Change",
-          },
-        ]);
-        return;
-      }
-
+      if (error) throw error;
       if (data) {
         setServiceItems(
           data.map((s) => ({
@@ -1011,30 +913,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({
       }
     } catch (error) {
       console.error("Error loading service items:", error);
-      // Fallback
-      setServiceItems([
-        { id: "1", nameFa: "تعویض روغن", nameEn: "Oil Change" },
-        {
-          id: "2",
-          nameFa: "تعویض فیلتر روغن",
-          nameEn: "Oil Filter Change",
-        },
-        {
-          id: "3",
-          nameFa: "تعویض فیلتر هوا",
-          nameEn: "Air Filter Change",
-        },
-        {
-          id: "4",
-          nameFa: "تعویض فیلتر کابین",
-          nameEn: "Cabin Filter Change",
-        },
-        {
-          id: "5",
-          nameFa: "تعویض تسمه تایم",
-          nameEn: "Timing Belt Change",
-        },
-      ]);
     }
   };
 

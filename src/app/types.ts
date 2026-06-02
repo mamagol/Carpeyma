@@ -55,22 +55,23 @@ export interface NormalizeCarResponse {
 // تایپ برای پلاک خودرو
 export interface PlateNumber {
   section1: string; // xx
-  letter: string;   // $
+  letter: string; // $
   section2: string; // yyy
   section3: string; // zz
 }
 
-export type ServiceType = 
-  | 'engine-oil'
-  | 'oil-filter'
-  | 'air-filter'
-  | 'cabin-filter'
-  | 'timing-belt'
-  | 'other';
+export type ServiceType =
+  | "engine-oil"
+  | "oil-filter"
+  | "air-filter"
+  | "cabin-filter"
+  | "timing-belt"
+  | "other";
 
 export interface Service {
   id: string;
   vehicleId: string;
+  serviceId?: string;
   type: ServiceType;
   currentKilometers: number;
   nextServiceKilometers: number;
@@ -87,18 +88,18 @@ export interface Transaction {
   amount: number;
   date: Date;
   description: string;
-  status: 'paid' | 'pending';
+  status: "paid" | "pending";
 }
 
-export type ServiceStatus = 'normal' | 'warning' | 'urgent';
+export type ServiceStatus = "normal" | "warning" | "urgent";
 
 export const SERVICE_TYPES: Record<ServiceType, string> = {
-  'engine-oil': 'روغن موتور',
-  'oil-filter': 'فیلتر روغن',
-  'air-filter': 'فیلتر هوا',
-  'cabin-filter': 'فیلتر کابین',
-  'timing-belt': 'تسمه تایم',
-  'other': 'سایر',
+  "engine-oil": "روغن موتور",
+  "oil-filter": "فیلتر روغن",
+  "air-filter": "فیلتر هوا",
+  "cabin-filter": "فیلتر کابین",
+  "timing-belt": "تسمه تایم",
+  other: "سایر",
 };
 
 // تایپ برای سرویس‌های سیستم (از جدول public.services)
